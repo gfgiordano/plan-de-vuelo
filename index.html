@@ -1,0 +1,1073 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Plan de Vuelo</title>
+<meta name="description" content="Planificador de vuelo VFR con aeródromos de Argentina">
+<meta name="theme-color" content="#0f2a44">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icono-192.png">
+<link rel="apple-touch-icon" href="icono-192.png">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+:root {
+  --bg: #eef2f6; --panel: #ffffff; --panel-2: #f6f8fb; --text: #142233; --muted: #5b6b7d;
+  --line: #d7dee7; --accent: #1565c0; --accent-text: #ffffff; --accent-soft: #e3eefb;
+  --ok: #1b7f3b; --warn: #a86400; --warn-bg: #fff4e0; --bad: #c62828; --bad-bg: #fdecea;
+  --head: #0f2a44; --head-text: #ffffff; --radius: 12px; --shadow: 0 1px 3px rgba(15,42,68,.12);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1520; --panel: #16212e; --panel-2: #1c2938; --text: #e6edf5; --muted: #9aabbd;
+    --line: #2a3a4c; --accent: #5aa2f0; --accent-text: #0d1520; --accent-soft: #1b3550;
+    --ok: #5cc27e; --warn: #f0b04a; --warn-bg: #3a2c12; --bad: #ff7b72; --bad-bg: #3d1d1d;
+    --head: #08111b; --head-text: #e6edf5; --shadow: none;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  background: var(--bg); color: var(--text);
+  font: 16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+}
+button, input, select, textarea { font: inherit; color: inherit; }
+header {
+  position: sticky; top: 0; z-index: 1000; background: var(--head); color: var(--head-text);
+  display: flex; align-items: center; gap: 8px; padding: 8px 16px;
+  padding-top: max(8px, env(safe-area-inset-top));
+}
+header h1 { font-size: 1.15rem; margin: 0; flex: 1; white-space: nowrap; }
+header .hbtn {
+  background: transparent; border: 1px solid rgba(255,255,255,.35); color: var(--head-text);
+  border-radius: 8px; padding: 8px 12px; min-height: 40px; cursor: pointer;
+}
+header select { background: transparent; color: var(--head-text); border: 1px solid rgba(255,255,255,.35); border-radius: 8px; padding: 8px; min-height: 40px; }
+header select option { color: #142233; }
+
+main { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; padding: 12px 16px 24px; max-width: 1500px; margin: 0 auto; }
+main > div, .fila > *, .fila3 > * { min-width: 0; }
+input, select, textarea { min-width: 0; max-width: 100%; }
+@media (min-width: 900px) {
+  main { grid-template-columns: 380px minmax(0, 1fr); align-items: start; }
+}
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 14px; }
+.card + .card { margin-top: 12px; }
+.card h2 { font-size: .8rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 10px; }
+label.campo { display: block; font-size: .8rem; color: var(--muted); margin-bottom: 8px; }
+label.campo input, label.campo select, label.campo textarea { display: block; width: 100%; margin-top: 3px; }
+input, select, textarea {
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px;
+  padding: 9px 10px; min-height: 42px; outline: none;
+}
+input:focus, select:focus, textarea:focus { border-color: var(--accent); }
+.fila { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.fila3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+.btn {
+  border: 1px solid var(--line); background: var(--panel-2); border-radius: 8px;
+  padding: 9px 14px; min-height: 42px; cursor: pointer;
+}
+.btn.prim { background: var(--accent); border-color: var(--accent); color: var(--accent-text); font-weight: 600; }
+.btn.peligro { color: var(--bad); }
+.btn:disabled { opacity: .5; cursor: default; }
+.acciones { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.acciones .btn { flex: 1 1 auto; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; font-size: .85rem; color: var(--muted); }
+.chips span { background: var(--panel-2); border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; }
+
+/* Búsqueda */
+.buscador { position: relative; }
+.sugerencias {
+  position: absolute; left: 0; right: 0; top: 100%; z-index: 1100; margin-top: 4px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 6px 20px rgba(0,0,0,.2);
+  max-height: 320px; overflow-y: auto; display: none;
+}
+.sugerencias.abierta { display: block; }
+.sug { display: block; width: 100%; text-align: left; border: 0; background: transparent; padding: 10px 12px; border-bottom: 1px solid var(--line); cursor: pointer; }
+.sug:last-child { border-bottom: 0; }
+.sug:hover, .sug.activa { background: var(--accent-soft); }
+.sug b { font-family: ui-monospace, Consolas, monospace; }
+.sug small { display: block; color: var(--muted); }
+
+/* Ruta */
+ol.ruta { list-style: none; margin: 10px 0 0; padding: 0; }
+ol.ruta li { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+ol.ruta li:last-child { border-bottom: 0; }
+.num { flex: none; width: 28px; height: 28px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; font-size: .8rem; font-weight: 700; }
+.num.o { background: var(--ok); color: #fff; } .num.d { background: var(--bad); color: #fff; }
+.wp { flex: 1; min-width: 0; }
+.wp b { font-family: ui-monospace, Consolas, monospace; }
+.wp small { display: block; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mini { flex: none; width: 38px; height: 38px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel-2); cursor: pointer; font-size: 1rem; }
+.vacio { color: var(--muted); font-size: .9rem; padding: 8px 0; }
+
+/* Mapa */
+#mapa { height: 46vh; min-height: 300px; border-radius: var(--radius); border: 1px solid var(--line); background: var(--panel-2); }
+@media (min-width: 900px) { #mapa { height: 52vh; } }
+.mapa-off { display: grid; place-items: center; height: 100%; color: var(--muted); text-align: center; padding: 16px; }
+.mapa-ops { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 8px; font-size: .85rem; color: var(--muted); }
+.mapa-ops label { display: flex; align-items: center; gap: 6px; min-height: 36px; }
+.mapa-ops input { min-height: auto; width: 20px; height: 20px; }
+.etq { background: var(--panel); color: var(--text); border: 1px solid var(--line); font: 600 11px ui-monospace, Consolas, monospace; padding: 1px 4px; box-shadow: none; }
+.etq::before { display: none; }
+
+/* Resumen */
+.totales { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 10px; }
+@media (max-width: 520px) { .totales { grid-template-columns: repeat(2, 1fr); } }
+.tot { background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }
+.tot small { display: block; color: var(--muted); font-size: .75rem; }
+.tot b { font-size: 1.2rem; font-variant-numeric: tabular-nums; }
+.tabla-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+table { border-collapse: collapse; width: 100%; font-size: .88rem; font-variant-numeric: tabular-nums; }
+th, td { padding: 7px 8px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+th { color: var(--muted); font-weight: 600; font-size: .75rem; text-transform: uppercase; }
+th:first-child, td:first-child { text-align: left; }
+td.mono { font-family: ui-monospace, Consolas, monospace; }
+tr.alerta-bad td { background: var(--bad-bg); }
+tr.alerta-warn td { background: var(--warn-bg); }
+.aviso { border-radius: 10px; padding: 10px 12px; margin-top: 10px; font-size: .9rem; }
+.aviso.bad { background: var(--bad-bg); color: var(--bad); }
+.aviso.warn { background: var(--warn-bg); color: var(--warn); }
+.aviso.ok { background: var(--accent-soft); color: var(--ok); }
+
+/* Diálogos */
+dialog { border: 0; border-radius: 14px; padding: 0; width: min(640px, calc(100vw - 32px)); max-height: calc(100vh - 32px); background: var(--panel); color: var(--text); }
+dialog::backdrop { background: rgba(5,12,20,.55); }
+.dlg-head { display: flex; align-items: center; gap: 8px; padding: 14px 16px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--panel); z-index: 1; }
+.dlg-head h3 { margin: 0; flex: 1; font-size: 1.05rem; }
+.dlg-body { padding: 14px 16px; }
+.lista-item { display: flex; gap: 8px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.lista-item .info { flex: 1; min-width: 0; }
+.lista-item small { display: block; color: var(--muted); }
+.toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--head); color: var(--head-text); padding: 10px 16px; border-radius: 10px; z-index: 3000; opacity: 0; transition: opacity .2s; pointer-events: none; max-width: calc(100vw - 32px); }
+.toast.ver { opacity: 1; }
+/* Seguimiento en vuelo */
+.vuelo-cab { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.vuelo-cab .btn { min-width: 48px; }
+.vuelo-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+@media (max-width: 700px) { .vuelo-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.vdato { background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }
+.vdato small { display: block; color: var(--muted); font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; }
+.vdato b { display: block; font-size: 1.6rem; line-height: 1.2; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.vdato span { display: block; color: var(--muted); font-size: .8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.vdato.destacado { border-color: var(--accent); background: var(--accent-soft); }
+.vdato.alerta { border-color: var(--bad); background: var(--bad-bg); }
+.gps-estado { font-size: .75rem; text-transform: none; letter-spacing: 0; font-weight: 400; margin-left: 6px; }
+@media (max-width: 899px) { body.en-vuelo #colDer { order: -1; } }
+.avion-icono { width: 34px; height: 34px; }
+.avion-icono svg { width: 34px; height: 34px; filter: drop-shadow(0 1px 2px rgba(0,0,0,.5)); }
+
+/* Teléfonos: al final para que tenga prioridad */
+@media (max-width: 560px) {
+  header { flex-wrap: wrap; padding-left: 12px; padding-right: 12px; }
+  header h1 { flex-basis: 100%; }
+  header .hbtn, header select { flex: 1 1 auto; padding: 6px 8px; }
+  .fila3 { grid-template-columns: 1fr 1fr; }
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>✈ Plan de Vuelo</h1>
+  <select id="unidadDist" aria-label="Unidad de distancia">
+    <option value="nm">NM</option><option value="km">km</option><option value="mi">mi</option>
+  </select>
+  <button class="hbtn" id="btnAeronaves">Aeronaves</button>
+  <button class="hbtn" id="btnHistorial">Historial</button>
+  <button class="hbtn" id="btnMas" aria-label="Más opciones">⋯</button>
+</header>
+
+<main>
+  <div id="colIzq">
+    <section class="card">
+      <h2>Aeronave</h2>
+      <select id="selAeronave" aria-label="Aeronave" style="width:100%"></select>
+      <div class="chips" id="datosAeronave" style="margin-top:8px"></div>
+      <div class="fila" style="margin-top:10px">
+        <label class="campo">Combustible al despegar <span id="uComb1"></span>
+          <input id="combInicial" type="number" inputmode="decimal" min="0" step="any">
+        </label>
+        <label class="campo">Reserva (min)
+          <input id="reservaMin" type="number" inputmode="numeric" min="0" step="1">
+        </label>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Ruta</h2>
+      <div class="buscador">
+        <input id="buscar" type="search" autocomplete="off" placeholder="Agregar aeródromo: código, OACI, nombre o provincia" style="width:100%">
+        <div class="sugerencias" id="sugerencias" role="listbox"></div>
+      </div>
+      <ol class="ruta" id="listaRuta"></ol>
+      <div class="acciones">
+        <button class="btn" id="btnInvertir">⇅ Invertir</button>
+        <button class="btn peligro" id="btnNuevo">Nuevo plan</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Viento y variación (opcional)</h2>
+      <div class="fila3">
+        <label class="campo">Viento desde (°)
+          <input id="vientoDir" type="number" inputmode="numeric" min="0" max="360" step="1" placeholder="0">
+        </label>
+        <label class="campo">Intensidad (kt)
+          <input id="vientoVel" type="number" inputmode="numeric" min="0" step="1" placeholder="0">
+        </label>
+        <label class="campo">Var. mag. (°, W −)
+          <input id="varMag" type="number" inputmode="decimal" step="any" placeholder="0">
+        </label>
+      </div>
+    </section>
+  </div>
+
+  <div id="colDer">
+    <section class="card" id="panelVuelo" hidden>
+      <div class="vuelo-cab">
+        <h2 style="margin:0;flex:1">En vuelo <span id="vEstadoGps" class="gps-estado"></span></h2>
+        <button class="btn" id="btnPrevWp" aria-label="Punto anterior">◀</button>
+        <button class="btn" id="btnSigWp" aria-label="Punto siguiente">▶</button>
+      </div>
+      <div class="vuelo-grid" id="vueloDatos"></div>
+      <div id="vueloAviso"></div>
+    </section>
+    <section class="card">
+      <div id="mapa"></div>
+      <div class="mapa-ops">
+        <button class="btn prim" id="btnGps">▶ Iniciar seguimiento GPS</button>
+        <label id="lblSeguir" hidden><input type="checkbox" id="seguirAvion" checked> Centrar en el avión</label>
+        <button class="btn" id="btnMapaOffline">Guardar mapa de la ruta (sin internet)</button>
+        <label><input type="checkbox" id="verTodos"> Mostrar todos los aeródromos (tocá uno para agregarlo)</label>
+      </div>
+      <div id="progresoMapa" style="font-size:.85rem;color:var(--muted)"></div>
+    </section>
+    <section class="card">
+      <h2>Resumen del plan</h2>
+      <div id="resumen"></div>
+      <div class="acciones">
+        <button class="btn prim" id="btnRegistrar">Registrar vuelo</button>
+      </div>
+    </section>
+  </div>
+</main>
+
+<!-- Aeronaves -->
+<dialog id="dlgAeronaves">
+  <div class="dlg-head"><h3>Aeronaves</h3><button class="btn" data-cerrar>Cerrar</button></div>
+  <div class="dlg-body">
+    <div id="listaAeronaves"></div>
+    <h2 style="font-size:.8rem;text-transform:uppercase;color:var(--muted);margin:16px 0 8px" id="tituloForm">Nueva aeronave</h2>
+    <form id="formAeronave">
+      <div class="fila3">
+        <label class="campo">Matrícula<input name="matricula" required placeholder="LV-ABC" autocapitalize="characters"></label>
+        <label class="campo">Fabricante<input name="fabricante" placeholder="Cessna"></label>
+        <label class="campo">Modelo<input name="modelo" required placeholder="C-150"></label>
+      </div>
+      <div class="fila">
+        <label class="campo">Velocidad de crucero<input name="velocidad" type="number" inputmode="decimal" min="1" step="any" required></label>
+        <label class="campo">Unidad de velocidad
+          <select name="unidadVel"><option value="kt">Nudos (kt)</option><option value="mph">Millas/h (mph)</option><option value="kmh">km/h</option></select>
+        </label>
+      </div>
+      <div class="fila">
+        <label class="campo">Consumo por hora<input name="consumo" type="number" inputmode="decimal" min="0.1" step="any" required></label>
+        <label class="campo">Unidad de combustible
+          <select name="unidadComb"><option value="L">Litros</option><option value="gal">Galones (US)</option></select>
+        </label>
+      </div>
+      <div class="fila">
+        <label class="campo">Capacidad del tanque<input name="capacidad" type="number" inputmode="decimal" min="0" step="any" required></label>
+        <label class="campo">Reserva habitual (min)<input name="reservaMin" type="number" inputmode="numeric" min="0" step="1" value="30"></label>
+      </div>
+      <div class="acciones">
+        <button class="btn prim" type="submit">Guardar</button>
+        <button class="btn" type="button" id="btnLimpiarForm">Limpiar</button>
+      </div>
+    </form>
+  </div>
+</dialog>
+
+<!-- Historial -->
+<dialog id="dlgHistorial">
+  <div class="dlg-head"><h3>Historial de vuelos</h3><button class="btn" id="btnCsv">Exportar CSV</button><button class="btn" data-cerrar>Cerrar</button></div>
+  <div class="dlg-body" id="listaHistorial"></div>
+</dialog>
+
+<!-- Registrar -->
+<dialog id="dlgRegistrar">
+  <div class="dlg-head"><h3>Registrar vuelo</h3><button class="btn" data-cerrar>Cancelar</button></div>
+  <form class="dlg-body" id="formRegistrar">
+    <p id="regResumen" style="margin-top:0"></p>
+    <label class="campo">Fecha<input name="fecha" type="date" required></label>
+    <label class="campo">Observaciones<textarea name="obs" rows="3" placeholder="Ej.: entrenamiento, navegación..."></textarea></label>
+    <div class="acciones"><button class="btn prim" type="submit">Guardar en historial</button></div>
+  </form>
+</dialog>
+
+<!-- Más -->
+<dialog id="dlgMas">
+  <div class="dlg-head"><h3>Datos y respaldo</h3><button class="btn" data-cerrar>Cerrar</button></div>
+  <div class="dlg-body">
+    <p style="margin-top:0;color:var(--muted)">Los datos (aeronaves, historial y plan actual) se guardan en este dispositivo. Usá el respaldo para pasarlos a otra tablet o PC.</p>
+    <div class="acciones">
+      <button class="btn" id="btnExportar">Descargar respaldo</button>
+      <button class="btn" id="btnImportar">Restaurar respaldo…</button>
+      <input type="file" id="archivoImportar" accept="application/json,.json" hidden>
+    </div>
+    <p id="infoInstalar" style="color:var(--muted);font-size:.9rem"></p>
+    <div class="acciones"><button class="btn prim" id="btnInstalar" hidden>Instalar como app</button></div>
+    <h2 style="font-size:.8rem;text-transform:uppercase;color:var(--muted);margin:16px 0 8px">Prueba en tierra</h2>
+    <p style="margin-top:0;color:var(--muted);font-size:.9rem">Simula un vuelo por la ruta cargada (10 veces más rápido) para ver cómo funciona el seguimiento sin salir a volar.</p>
+    <div class="acciones"><button class="btn" id="btnSimular">Simular vuelo</button></div>
+  </div>
+</dialog>
+
+<div class="toast" id="toast"></div>
+
+<script src="aerodromos.js"></script>
+<script src="datos_iniciales.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+'use strict';
+// ---------- Utilidades ----------
+const $ = (s) => document.querySelector(s);
+const CLAVE = 'planDeVuelo.v1';
+const A_KT = { kt: 1, mph: 0.868976, kmh: 0.539957 };   // velocidad -> nudos
+const DE_NM = { nm: 1, km: 1.852, mi: 1.150779 };         // NM -> unidad elegida
+const NOM_VEL = { kt: 'kt', mph: 'mph', kmh: 'km/h' };
+const R_NM = 3440.065;
+
+const sinAcentos = (t) => (t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+const num = (v) => { const n = parseFloat(String(v).replace(',', '.')); return Number.isFinite(n) ? n : null; };
+const r1 = (n) => (Math.round(n * 10) / 10).toLocaleString('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+const r0 = (n) => Math.round(n).toLocaleString('es-AR');
+const grados = (n) => String(Math.round(((n % 360) + 360) % 360) || 360).padStart(3, '0') + '°';
+const hhmm = (min) => { const m = Math.round(min); return Math.floor(m / 60) + ':' + String(m % 60).padStart(2, '0'); };
+const hoy = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); };
+function el(tag, props = {}, ...hijos) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(props)) {
+    if (k === 'class') e.className = v;
+    else if (k.startsWith('on')) e.addEventListener(k.slice(2), v);
+    else if (v !== undefined && v !== null) e.setAttribute(k, v);
+  }
+  for (const h of hijos.flat()) if (h !== null && h !== undefined && h !== false) e.append(h.nodeType ? h : String(h));
+  return e;
+}
+function aviso(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('ver'); clearTimeout(aviso.t); aviso.t = setTimeout(() => t.classList.remove('ver'), 2600); }
+
+// ---------- Datos ----------
+const AD = new Map(window.AERODROMOS.map((a) => [a.loc, a]));
+const INDICE = window.AERODROMOS.map((a) => ({ a, txt: sinAcentos([a.loc, a.oaci, a.iata, a.nom, a.prov].join(' ')) }));
+
+function estadoInicial() {
+  const ini = window.DATOS_INICIALES || { aeronaves: [], vuelos: [] };
+  return {
+    aeronaves: structuredClone(ini.aeronaves), vuelos: structuredClone(ini.vuelos),
+    ajustes: { unidadDist: 'nm', verTodos: false },
+    plan: { aeronave: ini.aeronaves[0]?.matricula || '', ruta: [], combInicial: null, reservaMin: null, vientoDir: null, vientoVel: null, varMag: null },
+  };
+}
+let S;
+try { S = JSON.parse(localStorage.getItem(CLAVE)); } catch { S = null; }
+if (!S || !Array.isArray(S.aeronaves)) S = estadoInicial();
+function guardar() { try { localStorage.setItem(CLAVE, JSON.stringify(S)); } catch { aviso('No se pudo guardar en este dispositivo'); } }
+
+const aeronaveActual = () => S.aeronaves.find((a) => a.matricula === S.plan.aeronave) || null;
+
+// ---------- Cálculos ----------
+function ortodromica(p1, p2) {
+  const rad = Math.PI / 180;
+  const [f1, l1, f2, l2] = [p1.lat * rad, p1.lon * rad, p2.lat * rad, p2.lon * rad];
+  const a = Math.sin((f2 - f1) / 2) ** 2 + Math.cos(f1) * Math.cos(f2) * Math.sin((l2 - l1) / 2) ** 2;
+  const dist = 2 * R_NM * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  const y = Math.sin(l2 - l1) * Math.cos(f2);
+  const x = Math.cos(f1) * Math.sin(f2) - Math.sin(f1) * Math.cos(f2) * Math.cos(l2 - l1);
+  return { distNm: dist, rv: ((Math.atan2(y, x) / rad) + 360) % 360 };
+}
+
+// Triángulo de velocidades: devuelve corrección de deriva y velocidad sobre el suelo.
+function triangulo(rv, tas, wDir, wVel) {
+  if (!wVel) return { wca: 0, gs: tas };
+  const rad = Math.PI / 180, ang = (wDir - rv) * rad;
+  const s = (wVel * Math.sin(ang)) / tas;
+  if (Math.abs(s) >= 1) return null;
+  const wca = Math.asin(s);
+  return { wca: wca / rad, gs: tas * Math.cos(wca) - wVel * Math.cos(ang) };
+}
+
+function calcularPlan() {
+  const ac = aeronaveActual(), p = S.plan;
+  const pts = p.ruta.map((c) => AD.get(c)).filter(Boolean);
+  const res = { tramos: [], ok: !!ac && pts.length >= 2, ac, distNm: 0, tiempoMin: 0, comb: 0, problemas: [] };
+  if (!res.ok) return res;
+  const tas = ac.velocidad * A_KT[ac.unidadVel];
+  const consumo = ac.consumo;
+  const wDir = p.vientoDir || 0, wVel = p.vientoVel || 0, varMag = p.varMag || 0;
+  const reservaMin = p.reservaMin ?? ac.reservaMin ?? 0;
+  let restante = p.combInicial ?? ac.capacidad;
+  res.combInicial = restante;
+  res.reserva = (reservaMin / 60) * consumo;
+  res.reservaMin = reservaMin;
+  for (let i = 1; i < pts.length; i++) {
+    const { distNm, rv } = ortodromica(pts[i - 1], pts[i]);
+    const tri = triangulo(rv, tas, wDir, wVel);
+    if (!tri || tri.gs <= 1) { res.problemas.push(`El viento supera la velocidad de la aeronave en el tramo ${pts[i - 1].loc}→${pts[i].loc}.`); res.ok = false; return res; }
+    const min = (distNm / tri.gs) * 60;
+    const comb = (min / 60) * consumo;
+    restante -= comb;
+    res.tramos.push({
+      de: pts[i - 1], a: pts[i], distNm, rv, rm: rv - varMag, proa: rv + tri.wca - varMag,
+      gs: tri.gs, min, comb, restante,
+      estado: restante < 0 ? 'bad' : restante < res.reserva ? 'warn' : 'ok',
+    });
+    res.distNm += distNm; res.tiempoMin += min; res.comb += comb;
+  }
+  res.restante = restante;
+  res.hayViento = wVel > 0; res.hayVar = varMag !== 0;
+  return res;
+}
+
+// ---------- Interfaz: aeronave y plan ----------
+function pintarAeronaves() {
+  const sel = $('#selAeronave');
+  sel.replaceChildren(
+    el('option', { value: '' }, S.aeronaves.length ? '— Elegí una aeronave —' : 'No hay aeronaves: cargalas en "Aeronaves"'),
+    ...S.aeronaves.map((a) => el('option', { value: a.matricula }, `${a.matricula} · ${[a.fabricante, a.modelo].filter(Boolean).join(' ')}`)),
+  );
+  if (!aeronaveActual()) S.plan.aeronave = '';
+  sel.value = S.plan.aeronave;
+  const ac = aeronaveActual(), chips = $('#datosAeronave');
+  chips.replaceChildren();
+  $('#uComb1').textContent = ac ? `(${ac.unidadComb})` : '';
+  if (ac) {
+    chips.append(
+      el('span', {}, `Crucero ${r0(ac.velocidad)} ${NOM_VEL[ac.unidadVel]}`),
+      el('span', {}, `Consumo ${r1(ac.consumo)} ${ac.unidadComb}/h`),
+      el('span', {}, `Tanque ${r0(ac.capacidad)} ${ac.unidadComb}`),
+    );
+  }
+  $('#combInicial').placeholder = ac ? String(ac.capacidad) : '';
+  $('#reservaMin').placeholder = ac ? String(ac.reservaMin ?? 30) : '30';
+}
+
+function pintarCamposPlan() {
+  const p = S.plan;
+  $('#combInicial').value = p.combInicial ?? '';
+  $('#reservaMin').value = p.reservaMin ?? '';
+  $('#vientoDir').value = p.vientoDir ?? '';
+  $('#vientoVel').value = p.vientoVel ?? '';
+  $('#varMag').value = p.varMag ?? '';
+  $('#unidadDist').value = S.ajustes.unidadDist;
+  $('#verTodos').checked = !!S.ajustes.verTodos;
+}
+
+function pintarRuta() {
+  const ol = $('#listaRuta'), ruta = S.plan.ruta;
+  ol.replaceChildren();
+  if (!ruta.length) { ol.append(el('li', { class: 'vacio' }, 'Buscá y agregá el aeródromo de origen, los intermedios y el de destino.')); return; }
+  ruta.forEach((cod, i) => {
+    const a = AD.get(cod);
+    const clase = i === 0 ? 'num o' : i === ruta.length - 1 && ruta.length > 1 ? 'num d' : 'num';
+    ol.append(el('li', {},
+      el('span', { class: clase }, i + 1),
+      el('div', { class: 'wp' }, el('b', {}, cod), a?.oaci ? ` · ${a.oaci}` : '', el('small', {}, a ? `${a.nom} — ${a.prov}` : 'Aeródromo desconocido')),
+      el('button', { class: 'mini', title: 'Subir', 'aria-label': 'Subir', disabled: i === 0 ? '' : null, onclick: () => moverPunto(i, -1) }, '↑'),
+      el('button', { class: 'mini', title: 'Bajar', 'aria-label': 'Bajar', disabled: i === ruta.length - 1 ? '' : null, onclick: () => moverPunto(i, 1) }, '↓'),
+      el('button', { class: 'mini', title: 'Quitar', 'aria-label': 'Quitar', onclick: () => quitarPunto(i) }, '✕'),
+    ));
+  });
+}
+
+function pintarResumen() {
+  const cont = $('#resumen'), r = calcularPlan(), u = S.ajustes.unidadDist, f = DE_NM[u];
+  cont.replaceChildren();
+  $('#btnRegistrar').disabled = !r.ok;
+  if (!r.ac) { cont.append(el('p', { class: 'vacio' }, 'Elegí una aeronave para calcular.')); return; }
+  if (S.plan.ruta.length < 2) { cont.append(el('p', { class: 'vacio' }, 'Agregá al menos dos aeródromos a la ruta.')); return; }
+  if (r.problemas.length) { r.problemas.forEach((t) => cont.append(el('div', { class: 'aviso bad' }, t))); return; }
+  const uc = r.ac.unidadComb;
+  cont.append(el('div', { class: 'totales' },
+    el('div', { class: 'tot' }, el('small', {}, 'Distancia'), el('b', {}, `${r1(r.distNm * f)} ${u}`)),
+    el('div', { class: 'tot' }, el('small', {}, 'Tiempo de vuelo'), el('b', {}, hhmm(r.tiempoMin))),
+    el('div', { class: 'tot' }, el('small', {}, 'Combustible'), el('b', {}, `${r1(r.comb)} ${uc}`)),
+    el('div', { class: 'tot' }, el('small', {}, 'Remanente final'), el('b', { style: `color:var(--${r.restante < 0 ? 'bad' : r.restante < r.reserva ? 'warn' : 'ok'})` }, `${r1(r.restante)} ${uc}`)),
+  ));
+  const cab = ['Tramo', `Dist (${u})`, 'Rumbo V'];
+  if (r.hayVar) cab.push('Rumbo M');
+  if (r.hayViento) cab.push('Proa', 'GS (kt)');
+  cab.push('Tiempo', `Comb (${uc})`, `Queda (${uc})`);
+  const filas = r.tramos.map((t) => {
+    const celdas = [el('td', { class: 'mono' }, `${t.de.loc} → ${t.a.loc}`), el('td', {}, r1(t.distNm * f)), el('td', {}, grados(t.rv))];
+    if (r.hayVar) celdas.push(el('td', {}, grados(t.rm)));
+    if (r.hayViento) celdas.push(el('td', {}, grados(t.proa)), el('td', {}, r0(t.gs)));
+    celdas.push(el('td', {}, hhmm(t.min)), el('td', {}, r1(t.comb)), el('td', {}, r1(t.restante)));
+    return el('tr', { class: t.estado === 'ok' ? '' : `alerta-${t.estado}` }, celdas);
+  });
+  cont.append(el('div', { class: 'tabla-wrap' }, el('table', {}, el('thead', {}, el('tr', {}, cab.map((c) => el('th', {}, c)))), el('tbody', {}, filas))));
+  const primeroMal = r.tramos.find((t) => t.estado === 'bad'), primeroBajo = r.tramos.find((t) => t.estado === 'warn');
+  if (primeroMal) cont.append(el('div', { class: 'aviso bad' }, `⚠ Combustible insuficiente: se agota en el tramo ${primeroMal.de.loc} → ${primeroMal.a.loc}. Planificá una escala para cargar.`));
+  else if (primeroBajo) cont.append(el('div', { class: 'aviso warn' }, `⚠ Desde el tramo ${primeroBajo.de.loc} → ${primeroBajo.a.loc} quedás por debajo de la reserva de ${r.reservaMin} min (${r1(r.reserva)} ${uc}).`));
+  else cont.append(el('div', { class: 'aviso ok' }, `✓ Combustible suficiente, con la reserva de ${r.reservaMin} min (${r1(r.reserva)} ${uc}).`));
+  if (S.plan.combInicial == null) cont.append(el('p', { style: 'color:var(--muted);font-size:.85rem;margin:8px 0 0' }, `Se calcula con el tanque lleno (${r0(r.combInicial)} ${uc}). Podés cambiar el combustible al despegar arriba.`));
+}
+
+function refrescar() { guardar(); pintarAeronaves(); pintarRuta(); pintarResumen(); pintarMapa(); }
+
+function agregarPunto(cod) {
+  const ruta = S.plan.ruta;
+  if (ruta[ruta.length - 1] === cod) { aviso(`${cod} ya es el último punto de la ruta`); return; }
+  ruta.push(cod); refrescar(); aviso(`${cod} agregado a la ruta`);
+}
+function quitarPunto(i) { S.plan.ruta.splice(i, 1); refrescar(); }
+function moverPunto(i, d) { const r = S.plan.ruta, j = i + d; if (j < 0 || j >= r.length) return; [r[i], r[j]] = [r[j], r[i]]; refrescar(); }
+
+// ---------- Buscador ----------
+let sugActiva = -1;
+function buscar(texto) {
+  const q = sinAcentos(texto.trim());
+  if (!q) return [];
+  const palabras = q.split(/\s+/);
+  const out = [];
+  for (const { a, txt } of INDICE) {
+    if (!palabras.every((w) => txt.includes(w))) continue;
+    const exacto = a.loc.toLowerCase() === q || a.oaci.toLowerCase() === q;
+    out.push({ a, peso: exacto ? 0 : a.loc.toLowerCase().startsWith(q) ? 1 : 2 });
+  }
+  return out.sort((x, y) => x.peso - y.peso || x.a.nom.localeCompare(y.a.nom)).slice(0, 40).map((o) => o.a);
+}
+function pintarSugerencias() {
+  const caja = $('#sugerencias'), res = buscar($('#buscar').value);
+  caja.replaceChildren();
+  sugActiva = res.length ? 0 : -1;
+  if (!$('#buscar').value.trim()) { caja.classList.remove('abierta'); return; }
+  if (!res.length) caja.append(el('div', { class: 'sug' }, 'Sin resultados'));
+  res.forEach((a, i) => caja.append(el('button', {
+    class: 'sug' + (i === 0 ? ' activa' : ''), type: 'button', 'data-loc': a.loc,
+    onmousedown: (e) => e.preventDefault(),
+    onclick: () => elegirSugerencia(a.loc),
+  }, el('b', {}, a.loc), a.oaci ? ` · ${a.oaci}` : '', ` — ${a.nom}`, el('small', {}, `${a.prov} · ${a.cond.toLowerCase()}${a.elev != null ? ` · ${a.elev} m` : ''}`))));
+  caja.classList.add('abierta');
+}
+function elegirSugerencia(loc) { agregarPunto(loc); $('#buscar').value = ''; $('#sugerencias').classList.remove('abierta'); }
+
+// ---------- Mapa ----------
+let mapa = null, capaRuta = null, capaTodos = null;
+function iniciarMapa() {
+  if (!window.L) {
+    $('#mapa').append(el('div', { class: 'mapa-off' }, 'El mapa necesita conexión a internet la primera vez. El resto de la app funciona sin conexión.'));
+    return;
+  }
+  mapa = L.map('mapa', { zoomControl: true, preferCanvas: true }).setView([-36, -62], 5);
+  L.tileLayer(URL_TESELAS, {
+    maxZoom: 15, attribution: '© OpenStreetMap',
+  }).addTo(mapa);
+  capaRuta = L.layerGroup().addTo(mapa);
+  capaTodos = L.layerGroup();
+  for (const a of window.AERODROMOS) {
+    L.circleMarker([a.lat, a.lon], { radius: 4, weight: 1, color: '#1565c0', fillOpacity: .5 })
+      .bindPopup(() => {
+        const div = el('div', {}, el('b', {}, a.loc), a.oaci ? ` · ${a.oaci}` : '', el('br'), a.nom, el('br'), el('small', {}, a.prov), el('br'));
+        div.append(el('button', { class: 'btn prim', style: 'margin-top:6px;min-height:36px', onclick: () => { agregarPunto(a.loc); mapa.closePopup(); } }, 'Agregar a la ruta'));
+        return div;
+      })
+      .addTo(capaTodos);
+  }
+}
+let encuadreAnterior = '';
+function pintarMapa() {
+  if (!mapa) return;
+  if (S.ajustes.verTodos) capaTodos.addTo(mapa); else capaTodos.remove();
+  capaRuta.clearLayers();
+  const pts = S.plan.ruta.map((c) => AD.get(c)).filter(Boolean);
+  if (!pts.length) return;
+  const coords = pts.map((a) => [a.lat, a.lon]);
+  if (coords.length > 1) L.polyline(coords, { color: '#e65100', weight: 4, opacity: .9 }).addTo(capaRuta);
+  pts.forEach((a, i) => {
+    const color = i === 0 ? '#1b7f3b' : i === pts.length - 1 ? '#c62828' : '#1565c0';
+    L.circleMarker([a.lat, a.lon], { radius: 8, color: '#fff', weight: 2, fillColor: color, fillOpacity: 1 })
+      .bindTooltip(`${i + 1}. ${a.loc}`, { permanent: true, direction: 'right', offset: [8, 0], className: 'etq' })
+      .bindPopup(`<b>${a.loc}</b>${a.oaci ? ' · ' + a.oaci : ''}<br>${a.nom.replace(/</g, '&lt;')}<br><small>${a.prov}</small>`)
+      .addTo(capaRuta);
+  });
+  const clave = S.plan.ruta.join(',');
+  if (clave !== encuadreAnterior) {
+    encuadreAnterior = clave;
+    if (coords.length === 1) mapa.setView(coords[0], 9); else mapa.fitBounds(coords, { padding: [40, 40], maxZoom: 11 });
+  }
+}
+
+// ---------- Gestión de aeronaves ----------
+let editando = null;
+function pintarListaAeronaves() {
+  const cont = $('#listaAeronaves');
+  cont.replaceChildren();
+  if (!S.aeronaves.length) cont.append(el('p', { class: 'vacio' }, 'Todavía no hay aeronaves cargadas.'));
+  S.aeronaves.forEach((a) => cont.append(el('div', { class: 'lista-item' },
+    el('div', { class: 'info' }, el('b', {}, a.matricula), ` · ${[a.fabricante, a.modelo].filter(Boolean).join(' ')}`,
+      el('small', {}, `${r0(a.velocidad)} ${NOM_VEL[a.unidadVel]} · ${r1(a.consumo)} ${a.unidadComb}/h · tanque ${r0(a.capacidad)} ${a.unidadComb} · reserva ${a.reservaMin ?? 30} min`)),
+    el('button', { class: 'btn', onclick: () => editarAeronave(a.matricula) }, 'Editar'),
+    el('button', { class: 'btn peligro', onclick: () => borrarAeronave(a.matricula) }, 'Borrar'),
+  )));
+}
+function editarAeronave(mat) {
+  const a = S.aeronaves.find((x) => x.matricula === mat), f = $('#formAeronave');
+  editando = mat;
+  for (const k of ['matricula', 'fabricante', 'modelo', 'velocidad', 'unidadVel', 'consumo', 'unidadComb', 'capacidad', 'reservaMin']) f.elements[k].value = a[k] ?? '';
+  $('#tituloForm').textContent = `Editando ${mat}`;
+  f.elements.velocidad.focus();
+}
+function limpiarFormAeronave() { editando = null; $('#formAeronave').reset(); $('#tituloForm').textContent = 'Nueva aeronave'; }
+function borrarAeronave(mat) {
+  if (!confirm(`¿Borrar la aeronave ${mat}? El historial de vuelos se conserva.`)) return;
+  S.aeronaves = S.aeronaves.filter((a) => a.matricula !== mat);
+  if (editando === mat) limpiarFormAeronave();
+  pintarListaAeronaves(); refrescar();
+}
+$('#formAeronave').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const f = e.target.elements;
+  const a = {
+    matricula: f.matricula.value.trim().toUpperCase(), fabricante: f.fabricante.value.trim(), modelo: f.modelo.value.trim(),
+    velocidad: num(f.velocidad.value), unidadVel: f.unidadVel.value, consumo: num(f.consumo.value),
+    unidadComb: f.unidadComb.value, capacidad: num(f.capacidad.value), reservaMin: num(f.reservaMin.value) ?? 30,
+  };
+  if (!a.matricula || !a.modelo) return aviso('Matrícula y modelo son obligatorios');
+  if (!(a.velocidad > 0) || !(a.consumo > 0) || !(a.capacidad >= 0)) return aviso('Revisá velocidad, consumo y capacidad');
+  const existente = S.aeronaves.findIndex((x) => x.matricula === a.matricula);
+  if (editando) {
+    if (a.matricula !== editando && existente >= 0) return aviso(`Ya existe ${a.matricula}`);
+    const i = S.aeronaves.findIndex((x) => x.matricula === editando);
+    S.aeronaves[i] = a;
+    if (S.plan.aeronave === editando) S.plan.aeronave = a.matricula;
+  } else {
+    if (existente >= 0) return aviso(`Ya existe ${a.matricula}`);
+    S.aeronaves.push(a);
+    if (!S.plan.aeronave) S.plan.aeronave = a.matricula;
+  }
+  S.aeronaves.sort((x, y) => x.matricula.localeCompare(y.matricula));
+  aviso(`${a.matricula} guardada`);
+  limpiarFormAeronave(); pintarListaAeronaves(); refrescar();
+});
+$('#btnLimpiarForm').addEventListener('click', limpiarFormAeronave);
+
+// ---------- Historial ----------
+function pintarHistorial() {
+  const cont = $('#listaHistorial'), u = S.ajustes.unidadDist;
+  cont.replaceChildren();
+  if (!S.vuelos.length) { cont.append(el('p', { class: 'vacio' }, 'No hay vuelos registrados.')); return; }
+  [...S.vuelos].sort((a, b) => b.fecha.localeCompare(a.fecha) || b.id - a.id).forEach((v) => cont.append(el('div', { class: 'lista-item' },
+    el('div', { class: 'info' }, el('b', {}, v.fecha), ` · ${v.ruta.join(' → ')}`,
+      el('small', {}, `${v.aeronave || '—'} · ${r1(v.distNm * DE_NM[u])} ${u} · ${hhmm(v.tiempoMin)} h · ${r1(v.combustible)} ${v.unidadComb || 'L'}`),
+      v.obs ? el('small', {}, v.obs) : null),
+    v.traza?.length ? el('button', { class: 'btn', onclick: () => verRecorrido(v) }, 'Recorrido') : null,
+    el('button', { class: 'btn', onclick: () => cargarVuelo(v) }, 'Cargar'),
+    el('button', { class: 'btn peligro', onclick: () => borrarVuelo(v.id) }, 'Borrar'),
+  )));
+}
+function cargarVuelo(v) {
+  S.plan.ruta = v.ruta.filter((c) => AD.has(c));
+  if (S.aeronaves.some((a) => a.matricula === v.aeronave)) S.plan.aeronave = v.aeronave;
+  $('#dlgHistorial').close(); refrescar(); aviso('Ruta cargada en el plan');
+}
+function borrarVuelo(id) {
+  if (!confirm('¿Borrar este vuelo del historial?')) return;
+  S.vuelos = S.vuelos.filter((v) => v.id !== id); guardar(); pintarHistorial();
+}
+function descargar(nombre, contenido, tipo) {
+  const url = URL.createObjectURL(new Blob([contenido], { type: tipo }));
+  const a = el('a', { href: url, download: nombre }); document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+$('#btnCsv').addEventListener('click', () => {
+  const q = (t) => `"${String(t ?? '').replace(/"/g, '""')}"`;
+  const filas = [['Fecha', 'Aeronave', 'Ruta', 'Distancia NM', 'Distancia km', 'Tiempo (min)', 'Combustible', 'Unidad', 'Observaciones'].map(q).join(';')];
+  for (const v of S.vuelos) filas.push([v.fecha, v.aeronave, v.ruta.join('-'), r1(v.distNm), r1(v.distNm * 1.852), Math.round(v.tiempoMin), r1(v.combustible), v.unidadComb || 'L', v.obs].map(q).join(';'));
+  descargar(`historial_vuelos_${hoy()}.csv`, '﻿' + filas.join('\r\n'), 'text/csv;charset=utf-8');
+});
+
+// ---------- Registrar ----------
+$('#btnRegistrar').addEventListener('click', () => {
+  const r = calcularPlan(); if (!r.ok) return;
+  const f = $('#formRegistrar');
+  f.reset(); f.elements.fecha.value = hoy();
+  $('#regResumen').textContent = `${r.ac.matricula}: ${S.plan.ruta.join(' → ')} · ${r1(r.distNm * DE_NM[S.ajustes.unidadDist])} ${S.ajustes.unidadDist} · ${hhmm(r.tiempoMin)} h · ${r1(r.comb)} ${r.ac.unidadComb}`;
+  $('#dlgRegistrar').showModal();
+});
+$('#formRegistrar').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const r = calcularPlan(), f = e.target.elements;
+  S.vuelos.push({
+    id: Math.max(0, ...S.vuelos.map((v) => v.id)) + 1, fecha: f.fecha.value, aeronave: r.ac.matricula,
+    ruta: [...S.plan.ruta], distNm: +r.distNm.toFixed(2), tiempoMin: Math.round(r.tiempoMin),
+    combustible: +r.comb.toFixed(1), unidadComb: r.ac.unidadComb, obs: f.obs.value.trim(),
+  });
+  guardar(); $('#dlgRegistrar').close(); aviso('Vuelo registrado en el historial');
+});
+
+// ---------- Respaldo ----------
+$('#btnExportar').addEventListener('click', () => descargar(`plan_de_vuelo_respaldo_${hoy()}.json`, JSON.stringify(S, null, 2), 'application/json'));
+$('#btnImportar').addEventListener('click', () => $('#archivoImportar').click());
+$('#archivoImportar').addEventListener('change', async (e) => {
+  const arch = e.target.files[0]; e.target.value = '';
+  if (!arch) return;
+  try {
+    const d = JSON.parse(await arch.text());
+    if (!Array.isArray(d.aeronaves) || !Array.isArray(d.vuelos)) throw new Error('formato');
+    if (!confirm(`Se reemplazarán los datos actuales por el respaldo (${d.aeronaves.length} aeronaves, ${d.vuelos.length} vuelos). ¿Continuar?`)) return;
+    const base = estadoInicial();
+    S = { aeronaves: d.aeronaves, vuelos: d.vuelos, ajustes: { ...base.ajustes, ...d.ajustes }, plan: { ...base.plan, ...d.plan } };
+    pintarCamposPlan(); refrescar(); $('#dlgMas').close(); aviso('Respaldo restaurado');
+  } catch { aviso('El archivo no es un respaldo válido'); }
+});
+
+// ---------- Instalación (PWA) ----------
+let eventoInstalar = null;
+window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); eventoInstalar = e; $('#btnInstalar').hidden = false; });
+$('#btnInstalar').addEventListener('click', async () => { if (!eventoInstalar) return; eventoInstalar.prompt(); await eventoInstalar.userChoice; eventoInstalar = null; $('#btnInstalar').hidden = true; });
+if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
+
+// ---------- Seguimiento en vuelo (GPS) ----------
+const URL_TESELAS = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+const MS_A_KT = 1.943844, M_A_FT = 3.28084;
+const VEL_DE_KT = { nm: [1, 'kt'], km: [1.852, 'km/h'], mi: [1.150779, 'mph'] };
+const LLEGADA_NM = 1;          // a esta distancia se da por alcanzado un punto
+const MAX_TRAZA = 1500;        // puntos del recorrido que se guardan en el historial
+let vigilancia = null, simulador = null, bloqueoPantalla = null, marcaAvion = null, lineaTraza = null, capaTraza = null;
+let ultimoFix = null, relojGps = null;
+
+const rad = (g) => g * Math.PI / 180;
+
+// Distancia perpendicular a la ruta (+ derecha / − izquierda) y distancia recorrida sobre el tramo.
+function desvio(a, b, p) {
+  const d13 = ortodromica(a, p), d12 = ortodromica(a, b);
+  const xtd = Math.asin(Math.sin(d13.distNm / R_NM) * Math.sin(rad(d13.rv - d12.rv))) * R_NM;
+  const c = Math.cos(d13.distNm / R_NM) / Math.cos(xtd / R_NM);
+  const atd = Math.acos(Math.max(-1, Math.min(1, c))) * R_NM * (Math.cos(rad(d13.rv - d12.rv)) < 0 ? -1 : 1);
+  return { xtd, atd, largo: d12.distNm };
+}
+
+function aeropuertoMasCercano(p) {
+  let mejor = null;
+  for (const a of window.AERODROMOS) {
+    const d = ortodromica(p, a).distNm;
+    if (!mejor || d < mejor.d) mejor = { a, d };
+  }
+  return mejor;
+}
+
+function iniciarSeguimiento(simulado = false) {
+  if (S.vuelo?.activo) return;
+  if (!simulado && !('geolocation' in navigator)) return aviso('Este dispositivo no tiene GPS disponible en el navegador');
+  if (simulado && S.plan.ruta.length < 2) return aviso('Cargá una ruta de al menos dos aeródromos para simular');
+  const ac = aeronaveActual();
+  S.vuelo = {
+    activo: true, simulado, inicio: null, sig: S.plan.ruta.length > 1 ? 1 : 0, traza: [],
+    combInicial: ac ? (S.plan.combInicial ?? ac.capacidad) : null,
+  };
+  guardar();
+  arrancarFuente();
+}
+
+function arrancarFuente() {
+  const v = S.vuelo;
+  capaTraza?.clearLayers();
+  $('#panelVuelo').hidden = false; $('#lblSeguir').hidden = false;
+  document.body.classList.add('en-vuelo'); window.scrollTo(0, 0);
+  $('#btnGps').textContent = '■ Terminar seguimiento';
+  $('#btnGps').classList.remove('prim'); $('#btnGps').classList.add('peligro');
+  $('#vEstadoGps').textContent = 'buscando señal…';
+  pedirPantallaEncendida();
+  if (v.simulado) simulador = simularVuelo(recibirFix);
+  else vigilancia = navigator.geolocation.watchPosition(recibirFix, errorGps, { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 });
+  clearInterval(relojGps);
+  relojGps = setInterval(() => {
+    if (ultimoFix && Date.now() - ultimoFix.recibido > 10000) $('#vEstadoGps').textContent = '⚠ sin señal GPS';
+  }, 3000);
+  pintarVuelo();
+}
+
+function errorGps(e) {
+  const msj = e.code === 1 ? 'Permiso de ubicación denegado. Habilitalo en el navegador para usar el seguimiento.'
+    : e.code === 3 ? 'buscando señal…' : 'No se pudo obtener la posición';
+  $('#vEstadoGps').textContent = e.code === 1 ? '' : msj;
+  if (e.code === 1) { aviso(msj); detenerFuente(); S.vuelo = null; guardar(); }
+}
+
+function recibirFix(pos) {
+  const v = S.vuelo; if (!v) return;
+  const c = pos.coords, t = pos.timestamp;
+  const f = { lat: c.latitude, lon: c.longitude, t, recibido: Date.now(), prec: c.accuracy,
+    altFt: c.altitude != null ? c.altitude * M_A_FT : null, gs: null, trk: null };
+  // Velocidad y rumbo: del GPS si los da; si no, calculados con el punto anterior.
+  const ant = ultimoFix;
+  if (c.speed != null && !Number.isNaN(c.speed)) f.gs = c.speed * MS_A_KT;
+  if (c.heading != null && !Number.isNaN(c.heading) && f.gs > 5) f.trk = c.heading;
+  if (ant && (f.gs == null || f.trk == null) && t > ant.t) {
+    const d = ortodromica(ant, f);
+    if (f.gs == null) f.gs = d.distNm / ((t - ant.t) / 3600000);
+    if (f.trk == null && d.distNm > 0.01) f.trk = d.rv;
+  }
+  if (f.trk == null && ant) f.trk = ant.trk;
+  ultimoFix = f;
+  if (!v.inicio) v.inicio = t;
+  const ultimo = v.traza[v.traza.length - 1];
+  if (!ultimo || t - ultimo[2] >= 5000) v.traza.push([+f.lat.toFixed(5), +f.lon.toFixed(5), t, f.altFt != null ? Math.round(f.altFt) : null]);
+  avanzarPunto(f);
+  $('#vEstadoGps').textContent = v.simulado ? '· simulación' : `· GPS ±${Math.round(f.prec)} m`;
+  if (v.traza.length % 6 === 0) guardar();
+  pintarVuelo();
+}
+
+// Pasa al siguiente punto de la ruta al llegar cerca o al sobrepasarlo.
+function avanzarPunto(f) {
+  const v = S.vuelo, pts = S.plan.ruta.map((c) => AD.get(c)).filter(Boolean);
+  if (pts.length < 2 || v.sig < 1 || v.sig >= pts.length) return;
+  const destino = pts[v.sig], origen = pts[v.sig - 1];
+  const dist = ortodromica(f, destino).distNm;
+  const { atd, largo } = desvio(origen, destino, f);
+  const esUltimo = v.sig === pts.length - 1;
+  if (esUltimo && v.llegado) return;
+  if (dist < LLEGADA_NM || (!esUltimo && atd > largo)) {
+    if (esUltimo) v.llegado = true;
+    aviso(esUltimo ? `Llegando a ${destino.loc}` : `${destino.loc} alcanzado. Próximo: ${pts[v.sig + 1].loc}`);
+    if (!esUltimo) v.sig++;
+    guardar();
+  }
+}
+
+function cambiarPunto(d) {
+  const v = S.vuelo; if (!v) return;
+  const n = S.plan.ruta.length;
+  v.sig = Math.max(1, Math.min(n - 1, v.sig + d)); v.llegado = false; guardar(); pintarVuelo();
+}
+
+function pintarVuelo() {
+  const v = S.vuelo, f = ultimoFix, cont = $('#vueloDatos'), avisoV = $('#vueloAviso');
+  if (!v?.activo) return;
+  const u = S.ajustes.unidadDist, fd = DE_NM[u], [fv, uv] = VEL_DE_KT[u];
+  const dato = (titulo, valor, sub, clase = '') => el('div', { class: 'vdato ' + clase }, el('small', {}, titulo), el('b', {}, valor), sub ? el('span', {}, sub) : null);
+  cont.replaceChildren(); avisoV.replaceChildren();
+  if (!f) { cont.append(dato('Posición', '—', 'Esperando señal GPS… Si estás en un lugar cerrado, acercate a una ventana.')); return; }
+  const transcurridoMin = v.inicio ? (f.t - v.inicio) / 60000 : 0;
+  const gs = f.gs ?? 0, moviendo = gs > 15;
+  const reloj = (min) => new Date(f.t + min * 60000).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+  const pts = S.plan.ruta.map((c) => AD.get(c)).filter(Boolean);
+  const varMag = S.plan.varMag || 0;
+
+  cont.append(
+    dato('Vel. sobre el suelo', moviendo || gs > 0 ? `${r0(gs * fv)} ${uv}` : '—', f.altFt != null ? `Altitud GPS ${r0(f.altFt)} ft` : ''),
+    dato('Rumbo actual', f.trk != null ? grados(f.trk - varMag) : '—', varMag ? 'magnético' : 'verdadero'),
+  );
+
+  if (pts.length >= 2 && v.sig >= 1 && v.sig < pts.length) {
+    const prox = pts[v.sig], ant = pts[v.sig - 1];
+    const aProx = ortodromica(f, prox);
+    let resto = 0;
+    for (let i = v.sig + 1; i < pts.length; i++) resto += ortodromica(pts[i - 1], pts[i]).distNm;
+    const aDest = aProx.distNm + resto;
+    const eteProx = moviendo ? (aProx.distNm / gs) * 60 : null, eteDest = moviendo ? (aDest / gs) * 60 : null;
+    const { xtd } = desvio(ant, prox, f);
+    cont.append(
+      dato(`Próximo: ${prox.loc}`, `${r1(aProx.distNm * fd)} ${u}`, `Rumbo directo ${grados(aProx.rv - varMag)}${eteProx != null ? ` · ${hhmm(eteProx)} · ${reloj(eteProx)}` : ''}`, 'destacado'),
+      dato(`Destino: ${pts[pts.length - 1].loc}`, `${r1(aDest * fd)} ${u}`, eteDest != null ? `Llegada ${reloj(eteDest)} (en ${hhmm(eteDest)})` : 'Llegada: —'),
+      dato('Desvío de la ruta', Math.abs(xtd) < 0.05 ? 'En ruta' : `${r1(Math.abs(xtd) * fd)} ${u}`, `${Math.abs(xtd) < 0.05 ? 'Tramo' : xtd > 0 ? 'A la derecha ·' : 'A la izquierda ·'} ${ant.loc} → ${prox.loc}`),
+    );
+    if (Math.abs(xtd) > 2) avisoV.append(el('div', { class: 'aviso warn' }, `Estás a ${r1(Math.abs(xtd) * fd)} ${u} a la ${xtd > 0 ? 'derecha' : 'izquierda'} de la ruta. Para ir directo a ${prox.loc}: rumbo ${grados(aProx.rv - varMag)}.`));
+  } else {
+    const cerca = aeropuertoMasCercano(f);
+    cont.append(dato('Aeródromo más cercano', cerca.a.loc, `${r1(cerca.d * fd)} ${u} · rumbo ${grados(ortodromica(f, cerca.a).rv - varMag)} · ${cerca.a.nom}`, 'destacado'));
+  }
+
+  cont.append(dato('Tiempo de vuelo', hhmm(transcurridoMin), v.inicio ? `Desde las ${new Date(v.inicio).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}` : ''));
+  const ac = aeronaveActual();
+  if (ac && v.combInicial != null) {
+    const queda = v.combInicial - (transcurridoMin / 60) * ac.consumo;
+    const reserva = ((S.plan.reservaMin ?? ac.reservaMin ?? 0) / 60) * ac.consumo;
+    const autonomia = (queda / ac.consumo) * 60;
+    cont.append(dato('Combustible estimado', `${r1(Math.max(0, queda))} ${ac.unidadComb}`, `Autonomía ${hhmm(Math.max(0, autonomia))}`, queda < reserva ? 'alerta' : ''));
+    if (queda < reserva) avisoV.append(el('div', { class: 'aviso bad' }, `⚠ El combustible estimado está por debajo de la reserva (${r1(reserva)} ${ac.unidadComb}). Es un cálculo por tiempo: verificá con los indicadores del avión.`));
+  }
+  pintarAvionEnMapa(f);
+}
+
+function pintarAvionEnMapa(f) {
+  if (!mapa) return;
+  const icono = L.divIcon({
+    className: 'avion-icono', iconSize: [34, 34], iconAnchor: [17, 17],
+    html: `<svg viewBox="0 0 24 24" style="transform:rotate(${f.trk ?? 0}deg)"><path fill="#ffb300" stroke="#3a2500" stroke-width="1" d="M12 1.5c.9 0 1.5.9 1.5 2v6l8 4.5v2l-8-2.5v5l2.5 1.8v1.7L12 21l-4-1v-1.7l2.5-1.8v-5l-8 2.5v-2l8-4.5v-6c0-1.1.6-2 1.5-2z"/></svg>`,
+  });
+  if (!marcaAvion) marcaAvion = L.marker([f.lat, f.lon], { icon: icono, zIndexOffset: 1000, interactive: false }).addTo(mapa);
+  else marcaAvion.setLatLng([f.lat, f.lon]).setIcon(icono);
+  const latlngs = S.vuelo.traza.map((p) => [p[0], p[1]]);
+  if (!lineaTraza) lineaTraza = L.polyline(latlngs, { color: '#8e24aa', weight: 3, dashArray: '6 6' }).addTo(mapa);
+  else lineaTraza.setLatLngs(latlngs);
+  if ($('#seguirAvion').checked) mapa.panTo([f.lat, f.lon], { animate: true });
+}
+
+function detenerFuente() {
+  if (vigilancia != null) navigator.geolocation.clearWatch(vigilancia);
+  vigilancia = null;
+  if (simulador) simulador.parar();
+  simulador = null;
+  clearInterval(relojGps);
+  bloqueoPantalla?.release().catch(() => {}); bloqueoPantalla = null;
+  marcaAvion?.remove(); marcaAvion = null; lineaTraza?.remove(); lineaTraza = null;
+  ultimoFix = null;
+  $('#panelVuelo').hidden = true; $('#lblSeguir').hidden = true;
+  document.body.classList.remove('en-vuelo');
+  $('#btnGps').textContent = '▶ Iniciar seguimiento GPS';
+  $('#btnGps').classList.add('prim'); $('#btnGps').classList.remove('peligro');
+}
+
+function terminarSeguimiento() {
+  const v = S.vuelo;
+  if (!v) return;
+  const traza = v.traza, ac = aeronaveActual();
+  detenerFuente();
+  S.vuelo = null; guardar();
+  if (traza.length < 2) { aviso('Seguimiento terminado'); return; }
+  let dist = 0;
+  for (let i = 1; i < traza.length; i++) dist += ortodromica({ lat: traza[i - 1][0], lon: traza[i - 1][1] }, { lat: traza[i][0], lon: traza[i][1] }).distNm;
+  const min = (traza[traza.length - 1][2] - traza[0][2]) / 60000;
+  if (!confirm(`Seguimiento terminado: ${hhmm(min)} h, ${r1(dist * DE_NM[S.ajustes.unidadDist])} ${S.ajustes.unidadDist} recorridos.\n¿Guardar el vuelo en el historial?`)) return;
+  const paso = Math.ceil(traza.length / MAX_TRAZA);
+  S.vuelos.push({
+    id: Math.max(0, ...S.vuelos.map((x) => x.id)) + 1, fecha: hoy(), aeronave: ac?.matricula || '',
+    ruta: S.plan.ruta.length ? [...S.plan.ruta] : [], distNm: +dist.toFixed(2), tiempoMin: Math.round(min),
+    combustible: ac ? +((min / 60) * ac.consumo).toFixed(1) : 0, unidadComb: ac?.unidadComb || 'L',
+    obs: v.simulado ? 'Vuelo simulado' : 'Registrado con GPS',
+    traza: traza.filter((_, i) => i % paso === 0 || i === traza.length - 1).map((p) => [p[0], p[1]]),
+  });
+  guardar(); aviso('Vuelo guardado en el historial');
+}
+
+async function pedirPantallaEncendida() {
+  try { if ('wakeLock' in navigator && document.visibilityState === 'visible') bloqueoPantalla = await navigator.wakeLock.request('screen'); } catch { /* sin soporte */ }
+}
+document.addEventListener('visibilitychange', () => { if (S.vuelo?.activo && document.visibilityState === 'visible') pedirPantallaEncendida(); });
+
+// Simulación: recorre la ruta a la velocidad de la aeronave, 10 veces más rápido, con algo de viento.
+function simularVuelo(cb) {
+  const pts = S.plan.ruta.map((c) => AD.get(c)).filter(Boolean);
+  const ac = aeronaveActual();
+  const kt = ac ? ac.velocidad * A_KT[ac.unidadVel] : 90, factor = 10, pasoS = 1;
+  let tramo = 1, recorrido = 0, t = Date.now(), alt = 300;
+  const id = setInterval(() => {
+    if (tramo >= pts.length) { clearInterval(id); return; }
+    const a = pts[tramo - 1], b = pts[tramo], { distNm, rv } = ortodromica(a, b);
+    recorrido += (kt * pasoS * factor) / 3600;
+    if (recorrido >= distNm) { recorrido -= distNm; tramo++; if (tramo >= pts.length) recorrido = distNm; }
+    const aa = pts[Math.min(tramo, pts.length - 1) - 1], bb = pts[Math.min(tramo, pts.length - 1)];
+    const fr = Math.min(1, recorrido / ortodromica(aa, bb).distNm);
+    const deriva = 0.008 * Math.sin(t / 120000);
+    t += pasoS * factor * 1000; alt = Math.min(2500, alt + 40);
+    cb({ timestamp: t, coords: { latitude: aa.lat + (bb.lat - aa.lat) * fr + deriva, longitude: aa.lon + (bb.lon - aa.lon) * fr, accuracy: 5,
+      altitude: alt / M_A_FT, speed: kt / MS_A_KT, heading: ortodromica(aa, bb).rv } });
+  }, pasoS * 1000);
+  return { parar: () => clearInterval(id) };
+}
+
+// Ver en el mapa el recorrido de un vuelo del historial.
+function verRecorrido(v) {
+  $('#dlgHistorial').close();
+  if (!mapa) return aviso('El mapa no está disponible sin conexión');
+  if (!capaTraza) capaTraza = L.layerGroup().addTo(mapa);
+  capaTraza.clearLayers();
+  const linea = L.polyline(v.traza, { color: '#8e24aa', weight: 3 }).addTo(capaTraza);
+  mapa.fitBounds(linea.getBounds(), { padding: [30, 30] });
+  aviso(`Recorrido del ${v.fecha} (${v.ruta.join(' → ') || 'sin ruta'})`);
+}
+
+// Descarga las teselas del mapa alrededor de la ruta para tenerlas sin internet.
+async function guardarMapaRuta() {
+  const pts = S.plan.ruta.map((c) => AD.get(c)).filter(Boolean);
+  if (!pts.length) return aviso('Primero cargá la ruta');
+  if (!('serviceWorker' in navigator) || !navigator.serviceWorker.controller) return aviso('Disponible cuando la app está publicada o instalada');
+  const margen = 0.4;
+  const lats = pts.map((p) => p.lat), lons = pts.map((p) => p.lon);
+  const caja = { n: Math.max(...lats) + margen, s: Math.min(...lats) - margen, e: Math.max(...lons) + margen, o: Math.min(...lons) - margen };
+  const tx = (lon, z) => Math.floor(((lon + 180) / 360) * 2 ** z);
+  const ty = (lat, z) => Math.floor(((1 - Math.log(Math.tan(rad(lat)) + 1 / Math.cos(rad(lat))) / Math.PI) / 2) * 2 ** z);
+  const urls = [];
+  for (let z = 5; z <= 11; z++) {
+    const lista = [];
+    for (let x = tx(caja.o, z); x <= tx(caja.e, z); x++) for (let y = ty(caja.n, z); y <= ty(caja.s, z); y++) lista.push(URL_TESELAS.replace('{z}', z).replace('{x}', x).replace('{y}', y));
+    if (urls.length + lista.length > 1200) break;   // límite para respetar el servicio gratuito de OpenStreetMap
+    urls.push(...lista);
+  }
+  const prog = $('#progresoMapa'), btn = $('#btnMapaOffline');
+  btn.disabled = true;
+  let hechas = 0, fallas = 0;
+  const cola = [...urls];
+  const trabajador = async () => {
+    while (cola.length) {
+      const u = cola.shift();
+      try { const r = await fetch(u); if (!r.ok) fallas++; } catch { fallas++; }
+      hechas++;
+      if (hechas % 10 === 0 || hechas === urls.length) prog.textContent = `Guardando mapa: ${hechas} de ${urls.length}…`;
+    }
+  };
+  await Promise.all([trabajador(), trabajador()]);
+  btn.disabled = false;
+  prog.textContent = fallas ? `Mapa guardado con ${fallas} partes faltantes (revisá la conexión y repetí).` : `✓ Mapa de la ruta guardado (${urls.length} partes). Se puede ver sin internet.`;
+}
+
+$('#btnGps').addEventListener('click', () => {
+  if (S.vuelo?.activo) { if (confirm('¿Terminar el seguimiento?')) terminarSeguimiento(); }
+  else iniciarSeguimiento(false);
+});
+$('#btnSimular').addEventListener('click', () => { $('#dlgMas').close(); if (S.vuelo?.activo) return aviso('Ya hay un seguimiento en curso'); iniciarSeguimiento(true); });
+$('#btnPrevWp').addEventListener('click', () => cambiarPunto(-1));
+$('#btnSigWp').addEventListener('click', () => cambiarPunto(1));
+$('#btnMapaOffline').addEventListener('click', guardarMapaRuta);
+
+// ---------- Eventos ----------
+document.querySelectorAll('[data-cerrar]').forEach((b) => b.addEventListener('click', () => b.closest('dialog').close()));
+$('#btnAeronaves').addEventListener('click', () => { limpiarFormAeronave(); pintarListaAeronaves(); $('#dlgAeronaves').showModal(); });
+$('#btnHistorial').addEventListener('click', () => { pintarHistorial(); $('#dlgHistorial').showModal(); });
+$('#btnMas').addEventListener('click', () => {
+  const instalada = matchMedia('(display-mode: standalone)').matches;
+  $('#infoInstalar').textContent = instalada ? 'La app ya está instalada en este dispositivo.'
+    : 'Para instalarla: en Chrome de Android tocá el menú ⋮ y elegí "Instalar app" o "Agregar a pantalla principal".';
+  $('#dlgMas').showModal();
+});
+$('#selAeronave').addEventListener('change', (e) => { S.plan.aeronave = e.target.value; S.plan.combInicial = null; S.plan.reservaMin = null; pintarCamposPlan(); refrescar(); });
+$('#unidadDist').addEventListener('change', (e) => { S.ajustes.unidadDist = e.target.value; refrescar(); });
+$('#verTodos').addEventListener('change', (e) => { S.ajustes.verTodos = e.target.checked; refrescar(); });
+for (const [id, k] of [['#combInicial', 'combInicial'], ['#reservaMin', 'reservaMin'], ['#vientoDir', 'vientoDir'], ['#vientoVel', 'vientoVel'], ['#varMag', 'varMag']]) {
+  $(id).addEventListener('input', (e) => { S.plan[k] = num(e.target.value); guardar(); pintarResumen(); });
+}
+$('#btnInvertir').addEventListener('click', () => { S.plan.ruta.reverse(); refrescar(); });
+$('#btnNuevo').addEventListener('click', () => {
+  if (S.plan.ruta.length && !confirm('¿Empezar un plan nuevo? Se borra la ruta actual.')) return;
+  Object.assign(S.plan, { ruta: [], combInicial: null, reservaMin: null, vientoDir: null, vientoVel: null });
+  pintarCamposPlan(); refrescar();
+});
+const inpBuscar = $('#buscar');
+inpBuscar.addEventListener('input', pintarSugerencias);
+inpBuscar.addEventListener('focus', pintarSugerencias);
+inpBuscar.addEventListener('blur', () => setTimeout(() => $('#sugerencias').classList.remove('abierta'), 150));
+inpBuscar.addEventListener('keydown', (e) => {
+  const items = [...document.querySelectorAll('#sugerencias .sug[data-loc]')];
+  if (!items.length) return;
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    sugActiva = (sugActiva + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
+    items.forEach((it, i) => it.classList.toggle('activa', i === sugActiva));
+    items[sugActiva].scrollIntoView({ block: 'nearest' });
+  } else if (e.key === 'Enter') { e.preventDefault(); if (sugActiva >= 0) elegirSugerencia(items[sugActiva].dataset.loc); }
+  else if (e.key === 'Escape') $('#sugerencias').classList.remove('abierta');
+});
+
+// ---------- Inicio ----------
+iniciarMapa();
+mapa?.on('dragstart', () => { if (S.vuelo?.activo) $('#seguirAvion').checked = false; });
+if (S.vuelo?.activo) arrancarFuente();   // si la página se recargó en pleno vuelo, sigue el seguimiento
+pintarCamposPlan();
+refrescar();
+</script>
+</body>
+</html>

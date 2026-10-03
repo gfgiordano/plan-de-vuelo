@@ -1,0 +1,16 @@
+{
+  "name": "Plan de Vuelo",
+  "short_name": "Plan Vuelo",
+  "description": "Planificador de vuelo VFR con aeródromos de Argentina",
+  "lang": "es",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0f2a44",
+  "theme_color": "#0f2a44",
+  "icons": [
+    { "src": "icono-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icono-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
